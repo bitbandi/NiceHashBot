@@ -22,80 +22,26 @@ public class HandlerClass
         // Perform check, if order has been created at all. If not, stop executing the code.
         if (OrderStats == null) return;
 
-        // Retreive JSON data from API server. Replace URL with your own API request URL.
-        string JSONData = GetHTTPResponseInJSON("http://www.coinwarz.com/v1/api/coininformation/?apikey=<API_KEY>&cointag=<COIN>");
-        if (JSONData == null) return;
-
-        // Serialize returned JSON data.
-        CoinwarzResponse Response;
-        try
+        List<Order> orders = APIWrapper.GetAllOrders(OrderStats.ServiceLocation, OrderStats.Algorithm, true);
+        double min = 10, max = 0;
+        foreach (Order o in orders)
         {
-            Response = JsonConvert.DeserializeObject<CoinwarzResponse>(JSONData);
-        }
-        catch
-        {
-            return;
+            if (!o.Alive) continue;
+            if (o.OrderType != 0) continue;
+            if (o.Workers == 0) continue;
+            if (max < o.Price) max = o.Price;
+            if (min > o.Price) min = o.Price;
         }
 
-        // Check if exchange rate is provided - at least one exchange must be included.
-        if (Response.Data.ExchangeRates.Length == 0) return;
-        double ExchangeRate = Response.Data.ExchangeRates[0].ToBTC;
-
-        // Calculate mining profitability in BTC per 1 TH of hashpower.
-        double HT = Response.Data.Difficulty * (Math.Pow(2.0, 32) / (1000000000000.0));
-        double CPD = Response.Data.BlockReward * 24.0 * 3600.0 / HT;
-        double C = CPD * ExchangeRate;
-
-        // Subtract service fees.
-        C -= 0.04 * C;
-
-        // Subtract minimal % profit we want to get.
-        C -= 0.01 * C;
+        if (max == 0 || min == 10) return;
 
         // Set new maximal price.
-        MaxPrice = Math.Floor(C * 10000) / 10000;
+        MaxPrice = Math.Floor((max - min) / 2 * 10000) / 10000;
+        //MaxPrice = Math.Floor(C * 10000) / 10000;
 
         // Example how to print some data on console...
         Console.WriteLine("Adjusting order #" + OrderStats.ID.ToString() + " maximal price to: " + MaxPrice.ToString("F4"));
     }
-
-    /// <summary>
-    /// Data structure used for serializing JSON response from CoinWarz. 
-    /// It allows us to parse JSON with one line of code and easily access every data contained in JSON message.
-    /// </summary>
-    #pragma warning disable 0649
-    class CoinwarzResponse
-    {
-        public bool Success;
-        public string Message;
-        
-        public class DataStruct
-        {
-            public string CoinName;
-            public string CoinTag;
-            public int BlockCount;
-            public double Difficulty;
-            public double BlockReward;
-            public bool IsBlockExplorerOnline;
-            public bool IsExchangeOnline;
-            public string Algorithm;
-            public class ExchangeRateStruct
-            {
-                public string Exchange;
-                public double ToUSD;
-                public double ToBTC;
-                public double Volume;
-                public double TimeStamp;
-            }
-            public ExchangeRateStruct[] ExchangeRates;
-            public double BlockTimeInSeconds;
-            public string HealthStatus;
-            public string Message;
-        }
-        public DataStruct Data;
-    }
-    #pragma warning restore 0649
-
 
     /// <summary>
     /// Property used for measuring time.
